@@ -23,6 +23,9 @@ log = logging.getLogger(__name__)
 import socket    # Basic TCP/IP communication on the internet
 import _thread   # Response computation runs concurrently with main program
 
+import os
+from pathlib import Path
+import configparser
 
 def listen(portnum):
     """
@@ -90,9 +93,41 @@ def respond(sock):
     log.info("Request was {}\n***\n".format(request))
 
     parts = request.split()
+    cred_file = config.configuration()
+    docroot = cred_file.DOCROOT
+
     if len(parts) > 1 and parts[0] == "GET":
-        transmit(STATUS_OK, sock)
-        transmit(CAT, sock)
+        '''Grabbing file request from parts'''
+        file_name = parts[1][1:]
+
+        '''If no file requested, defaults to cat graphic'''
+        if len(parts[1]) == 1:
+            transmit(STATUS_OK, sock)
+            transmit(CAT, sock)
+
+        elif( ".." in file_name or "~" in file_name):
+            '''
+            Testing for the case of forbidden characters in file path
+            '''
+            transmit(STATUS_FORBIDDEN, sock)
+            transmit("Forbidden: Illegal characters (~ or ..) in URL", sock)
+
+        else:
+            '''
+            Checks if file requested exists; transmits STATUS_NOT_FOUND if file doesnt exist,
+            transmits contents of file if file exists
+            '''
+            file_path = os.path.join(docroot, file_name)
+
+            if os.path.exists(file_path):
+                transmit(STATUS_OK, sock)
+
+                with open(file_path, "r") as f:
+                    transmit(f.read(), sock)
+            else:
+                transmit(STATUS_NOT_FOUND, sock)
+                transmit("File not found", sock)
+
     else:
         log.info("Unhandled request: {}".format(request))
         transmit(STATUS_NOT_IMPLEMENTED, sock)
